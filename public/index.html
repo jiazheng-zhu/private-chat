@@ -1,0 +1,176 @@
+<!DOCTYPE html>                    
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Room</title>
+    <link rel="stylesheet" href="css/style.css">  
+</head>
+<body>
+    
+    <div id="app">
+        <button @click="connectBtn" v-if="username && !connected">Connect</button>
+        <button @clicl="disconnectBtn" v-if="connected">Disconnect</button>
+        <div>
+            <div v-if="!connected">
+                <input type="text" placeholder="Enter your username" v-model="username">
+            </div>
+            <div v-for='user in users' v-if="users[0] && connected"  id="users">
+                <div @click="sendPrivMsg(user)" class="user">
+                    <h1>{{user.username}}</h1>
+                </div>
+            </div>
+            <div id="messages" v-if="messages[0]" v-for="message in messages">
+                
+                <div class="newUser" v-if="message.newUser">
+                    <p> {{message.user}} joined the chat </p>
+                </div>
+                <div v-if="message.newUser === false">
+                    <p>{{message.user}} left the chat</p>
+                </div>
+                <div v-if="message.isPrivateMsg === true && message.isSent === false">
+                    <p>New private message from: {{ message.user }}</p>
+                    <p>{{ message.text }}</p>
+                </div>
+                <div v-if="message.newUser === undefined && message.isPrivateMsg === false">
+                    <p>{{ message.user }}</p>
+                    <p>{{ message.text }}</p>
+                </div>
+                <div v-if="message.isPrivateMsg === true && message.isSent === true">
+                    <p>Private message sent to: {{ message.sentTo }}</p>
+                    <p>{{ message.text }}</p>
+                </div>
+            </div>
+            
+            
+            <div v-if="connected">
+                <input type="text" v-model="newMsg">
+                <button @click="sendMsg">Send message</button>
+            </div> 
+            <small v-if="privMsg.isSendingPrivMsg" class="privMsg">Sending private message to {{ privMsg.privateMsgTo.username }} <span @click="removePrivateMsg">(clear)</span></small>
+            
+            
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <script src="https://cdn.socket.io/3.1.3/socket.io.min.js" integrity="sha384-cPwlPLvBTa3sKAgddT6krw0cJat7egBga3DJepJyrLl4Q9/5WLra3rrnMcyTyOnh" crossorigin="anonymous"></script>
+    
+    <script>
+        var app = new Vue({
+            el: '#app',
+            data(){
+                return{
+                    connected: false,
+                    socket: '',
+                    newMsg: '',
+                    messages: [],
+                    username: null,
+                    users: [],
+                    privMsg: 
+                    {
+                        isSendingPrivMsg: false,
+                        privateMsgTo: {
+                            id: null,
+                            username: ""
+                        }
+                    }
+                }
+            },
+            methods: {
+                sendMsg() {
+                    if (this.privMsg.isSendingPrivMsg === false) {
+                        this.socket.emit('sendMessage', {
+                            username: this.username,
+                            text: this.newMsg
+                        })
+                        this.newMsg = '';
+                    } else if (this.privMsg.isSendingPrivMsg === true) {
+                        this.socket.emit('sendPrivateMessage', {
+                            username: this.username,
+                            text: this.newMsg,
+                            sendTo: this.privMsg.privateMsgTo
+                        })
+                        this.messages.push({
+                            username: this.username,
+                            text: this.newMsg,
+                            isPrivateMsg: true,
+                            isSent: true,
+                            sentTo: this.privMsg.privateMsgTo.username
+                        })
+                        this.newMsg = '';
+                    }
+                },
+                connectBtn(){
+                    if(this.username){
+                        this.socket = io();
+                        this.socket.on('connect', () => {
+                            this.connected = true;
+                            this.sendUsername();
+                            console.log('Connected to Web Socket awesome chat private room');
+                            
+                            
+                            this.socket.on('newUserJoined', (user) => {
+                                this.messages.push({
+                                    newUser: true,
+                                    user: user
+                                })
+                            })
+                            
+                            this.socket.on('userDisconnected', (user) => {
+                                this.messages.push({
+                                    newUser: false,
+                                    user: user
+                                })
+                            })
+                            this.socket.on('updatedUserList', (clients) => {
+                                this.users = clients;
+                            })
+                            
+                            this.socket.on('newMessage', (msgData) => {
+                                this.messages.push({
+                                    user: msgData.username,
+                                    text: msgData.text,
+                                    isPrivateMsg: false
+                                })
+                            })
+                            
+                            this.socket.on('newPrivateMessage', (msgData) => {
+                                this.messages.push({
+                                    user: msgData.username,
+                                    text: msgData.text,
+                                    isPrivateMsg: true,
+                                    isSent: false
+                                })
+                            })
+                        })
+                    } else {
+                        alert('Enter you username');
+                    }
+                },
+                disconnectBtn() {
+                    this.socket.disconnect();
+                    this.connected = false;
+                },
+                sendUsername(){
+                    this.socket.emit('newUser', this.username);
+                },
+                sendPrivMsg(user){
+                    if (user) {
+                        console.log(user);
+                        this.privMsg.isSendingPrivMsg = true;
+                        this.privMsg.privateMsgTo.id = user.id;
+                        this.privMsg.privateMsgTo.username = user.username;
+                    }
+                },
+                removePrivateMsg() {
+                    this.privMsg.isSendingPrivMsg = false;
+                    this.privMsg.privateMsgTo.id = null;
+                    this.privMsg.privateMsgTo.username = "";
+                }
+            }
+        })
+    </script>
+</body>
+</html>
